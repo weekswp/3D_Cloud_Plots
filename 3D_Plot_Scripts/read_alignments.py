@@ -395,9 +395,6 @@ def plot_full(x_array,y_array,z_array,i,temp):
     plt.savefig(image_name, format=image_format, dpi=1200)
     plt.savefig(image_name.strip(".svg")+".png")
     plt.close()
-    compositional_x_dict["Motif "+str(i+1)]=x
-    compositional_y_dict["Motif "+str(i+1)]=y
-    compositional_z_dict["Motif "+str(i+1)]=z
 
 def plot_types(x_array,y_array,z_array,tag,i,temp):
     mu, sigma = 0, 0.1 
