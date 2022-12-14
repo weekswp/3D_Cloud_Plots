@@ -35,9 +35,6 @@ cwd = Path()
 c = ["Cu65Zr35"]
 T = ["1450K"]
 files_already_made = False
-compositional_x_dict = {}
-compositional_y_dict = {}
-compositional_z_dict = {}
 
 #Reads atomic positions from xyz file
 #inputs:
@@ -496,4 +493,5 @@ def main():
             save_directory = Path("../data/"+temp+"/"+comp+"/global_xyz")
             get_aligned_xyz(temp,comp,commonality_directory,affinity_directory,cluster_directory,results_directory,save_directory)
 
-main()
+if __name__ == "__main__":
+    main()
