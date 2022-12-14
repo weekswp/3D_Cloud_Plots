@@ -6,12 +6,8 @@
 import os
 from path import Path
 import numpy as np
-import json
 from scipy import stats
-import scipy.spatial
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import math
 import matplotlib as mpl
 import seaborn as sns
 
@@ -25,8 +21,7 @@ c = ["Cu65Zr35"]
 T = ["1450K"]
 
 #This method gets a sorted list of HDBSCAN groups from largest to smallest for the provided locations.
-def get_sorted_files(commonality_directory,affinity_location):
-    local_dict = {}
+def get_sorted_files(commonality_directory):
     os.chdir(commonality_directory)
     files = os.listdir(os.getcwd())
     file_array = []
