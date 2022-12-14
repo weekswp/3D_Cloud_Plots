@@ -1,10 +1,18 @@
 #This script reads in the data from constituent clusters of each HDBSCAN group 
-#and saves the data to global xyz file in the ../data/global_xyz folder. 
-#In order to do this, we read in the cluster files (../data/clusters) and the PPM results
-#files (../data/results). In the paper associated with this repository, 13 Cu-Zr compositions and 3 temperatures
+#and saves the data to global xyz file in the ../data/temp/comp/global_xyz folder. 
+#In order to do this, we read in the cluster files (../data/temp/comp/clusters) and the PPM results
+#files (../data/temp/comp/results). In the paper associated with this repository, 13 Cu-Zr compositions and 3 temperatures
 #were analyzed. For the purposes of this explanation, this has been reduces to a single
 #composition and a single temperature.
+#
+#As a general note, many of the functions used here are covered in greater detail in other github repositories and one is
+#directed to these for further inforamtion:
+#   https://github.com/weekswp/liquid_structure_analysis
+#   https://github.com/paul-voyles/motifextraction
+#   https://github.com/spatala/ppm3d
+
 from path import Path
+import os
 import numpy as np
 import json
 from scipy import stats
@@ -20,10 +28,10 @@ cwd = Path()
 #Global variables:
 # c: (array) used to tell the code which compositions we want to investigate.
 # T: (array) used to tell the code which temperatures we would like to investigate.
-# cluster_directory: (Path) leads the system to the cluster files.
-# results_directory: (Path) leads the system to the results files.
-cluster_directory = Path("../data/clusters")
-results_directory = Path("../data/results")
+# files_already_made: (Boolean) variable that allows one to bypass the most computationally-intensive 
+#part of the analysis if it has already been performed by setting variable to True. For clarity, if this variable is set to True,
+#this code will essentially do nothing and was installed as a failsafe to ensure that we haven't already done the analysis.
+
 c = ["Cu65Zr35"]
 T = ["1450K"]
 files_already_made = False
@@ -31,6 +39,11 @@ compositional_x_dict = {}
 compositional_y_dict = {}
 compositional_z_dict = {}
 
+#Reads atomic positions from xyz file
+#inputs:
+#   f: filename
+#returns:
+#   data: numpy array of atomic positions from xyz file
 def read_xyz(f):
     data = open(f).readlines()
     data.pop(0)  # Number of atoms
@@ -38,6 +51,11 @@ def read_xyz(f):
     data = np.array([[float(x) for x in line.split()[1:]] for line in data])
     return data
 
+#Reads atom types from xyz file
+#inputs:
+#   f: filename
+#returns:
+#   data: numpy array of atomic types from xyz file
 def read_types(f):
     data = open(f).readlines()
     data.pop(0)
@@ -47,12 +65,14 @@ def read_types(f):
         type_array.append(line.split()[0])
     return np.array(type_array)
 
+#Part of the Point Pattern Matching (PPM) process (see above repositories).
 def normalize_edge_lengths(coordinates):
     pdists = scipy.spatial.distance.pdist(coordinates)
     mean = np.mean(pdists)
     coordinates /= mean
     return coordinates, mean
 
+#Loads in "affinity" file denoted by filename input (see above repositories for details on affinity creation).
 def load_affinity(filename, normalize=True) -> np.ndarray:
     print("Loading {} affinity...".format(filename))
     affinity = np.load(filename)
@@ -85,19 +105,24 @@ def load_affinity(filename, normalize=True) -> np.ndarray:
     #print("New max:  {}".format(np.amax(affinity)))
     return affinity
 
-#Find motifs for groups of given replicate
+#Find motif for the HDBSCAN group associated with input filename where the motif is defined as the cluster that 
+# exhibits the lowest average dissimilarity to the other group members. temp and comp also fed in to lead the system to
+#the appropriate location for the files.
+#variables:
+#   motif_dir: (Path) pointer for main directory associated with input temp and comp
+#   affinity_dir: (Path) pointer for directory where "affinities" files are.
+#   group_list: (array) used to keep track of structures that are in the HDBSCAN group.
+#   minimum, pointer: (int) used to track the lowest average dissimilarity in the group.
+#   local_diss, local_count: (int) used to track the average dissimilarity of a given structure to the other structures in the group.
+#returns:
+#   motif: (str) representative "motif" from the HDBSCAN group associated with the input filename.
 def find_motifs(temp,comp,filename):
     motif_dict = {}
-    if temp != "1450K":
-        affinity_dir = cwd+"/"+temp+"/"+comp+"/affinities"
-        motif_dir = cwd+"/"+temp+"/"+comp
-    else:
-        affinity_dir = "F://CuZr_Motif/1000_atom_simulations/Mendelev/"+comp+"/affinities"
-        motif_dir = "F://CuZr_Motif/1000_atom_simulations/Mendelev/"+comp
+    motif_dir = Path("../data/"+temp+"/"+comp)
+    affinity_dir = Path(motif_dir+"/affinities")
     os.chdir(affinity_dir)
     affinities = load_affinity('combined_affinity.npy')
-    refined_dir = affinity_dir+"/refined_indices"
-    os.chdir(refined_dir)
+    os.chdir(affinity_dir+"/refined_indices")
     group_list = []
     with open(filename,"r") as current_group:
         current_group.readline()
@@ -107,11 +132,9 @@ def find_motifs(temp,comp,filename):
             line = current_group.readline()
         current_group.close()
     os.chdir(motif_dir)
-    if os.path.isdir("motifs") == False:
-        os.mkdir("motifs")
-    os.chdir("motifs")
     minimum = 1000
     pointer = 0
+    #iterate through the group_list and find the structure with lowest average dissimilarity.
     for i in range (0,len(group_list)):
         local_diss = 0.0
         local_count = 0
@@ -120,22 +143,26 @@ def find_motifs(temp,comp,filename):
                 local_diss += float(affinities[group_list[i]][group_list[j]])
                 local_count += 1
         average = round(float(local_diss/local_count),4)
+        #If the average value is lower than the smallest one we've seen so far, make it the new minimum and alter the pointer object to 
+        #point to the new minimum.
         if average < minimum:
             minimum = average
             pointer = i
     motif = str(group_list[pointer])
     return motif
 
-def compare(model,target,comp,temp):
+#Method closely tied to the Point Pattern Matching (PPM) and affinity creation process. See repositories referenced at the top of the file
+#for additional information. In short, this method reads in cluster files, reads in results files from the PPM alignment, and then rotates
+#the target structure to that of the model such that rotational degrees of freedom are minimized.
+#returns:
+#   new_coordinates: (numpy array) aligned coordinates for each atom in the structure.
+#   new_types: (array) atom types of each atom in the structure
+#   a_count: tracks the number of operations that were NOT swapped.
+#   b_count: tracks the number of operations that WERE swapped.
+def compare(model,target,comp,temp,cluster_dir,results_dir):
     original_dir = os.getcwd()
     a_count = 0
     b_count = 0
-    if temp != "1450K":
-        cluster_dir = "Z:/Active/metallic-glass/Working_Directories/Mendelev_Potential_CuZr_Temp_Analysis_Corrected/"+temp+"/"+comp+"/Combined/data/clusters"
-        results_dir = "Z:/Active/metallic-glass/Working_Directories/Mendelev_Potential_CuZr_Temp_Analysis_Corrected/"+temp+"/"+comp+"/Combined/data/results"
-    else:
-        cluster_dir = "Z:/Active/metallic-glass/Working_Directories/Mendelev_Potential_CuZr_PPM_HDBSCAN/"+comp+"/Combined/data/clusters"
-        results_dir = "Z:/Active/metallic-glass/Working_Directories/Mendelev_Potential_CuZr_PPM_HDBSCAN/"+comp+"/Combined/data/results"
     os.chdir(cluster_dir)
     A_model = read_xyz(str(model)+".xyz")
     A_types = read_types(str(model)+".xyz")
@@ -145,6 +172,8 @@ def compare(model,target,comp,temp):
     B_target = np.array(B_target.T)
     A_model,mscale = normalize_edge_lengths(A_model)
     B_target,tscale = normalize_edge_lengths(B_target)
+    #swapped variable a necessity for the way that numpy functions for this operation where whichever is larger (model or target)
+    #needs to be the results file that is read.
     if B_target.shape[0] > A_model.shape[0]:
         swapped = True
     else:
@@ -195,7 +224,6 @@ def compare(model,target,comp,temp):
             new_coordinates = np.array((-fitted).T).tolist()
         else:
             new_coordinates = np.array(fitted.T).tolist()
-        #print(new_coordinates)
         os.chdir(original_dir)
         return new_coordinates,returned_types,a_count,b_count
     except:
@@ -205,15 +233,35 @@ def compare(model,target,comp,temp):
         os.chdir(original_dir)
         return new_coordinates,new_types,a_count,b_count
     
-def traceback(comp,temp,local_list,filename):
+#This function is time-consuming and traces back the constituent clusters of a group (input local_list) to get the aligned positions.
+#inputs:
+#   comp: (str) composition of interest
+#   temp: (str) temperature of interest
+#   local_list: (array) array of constituent atoms in the HDBSCAN group
+#   filename: (str) file associated with HDBSCAN group
+#   cluster_directory: (Path) clusters location to be fed into compare()
+#   results_directory: (Path) results location to be fed into compare()
+#variables:
+#   model: (str) "motif" structure that we align the rest of the structures to.
+#   target: (str) used in the for loop to iterate over the constituent atoms in local_list
+#   traced_array: (array) used to keep track of the aligned x,y,z positions to be added to the new_xyz file
+#   traced_types: (array) used to keep track of the aligned atom types of the atoms to be added to the new_xyz file.
+#   a_count, b_count: (int) used to monitor the alignment process (see compare() method)
+#   comparison: (array) aligned positions of structure returned from compare() method.
+#   types: (array) atom types of the structure returned from the compare() method.
+#returns:
+#   new_xyz: (str) large XYZ style string that contains the aligned positions of all constituent structures from the HDBSCAN group.
+def traceback(comp,temp,local_list,filename,cluster_directory,results_directory):
     traced_array = []
     traced_types = []
     a_count = 0
     b_count = 0
     original_dir = os.getcwd()
+    #This is the motif that are are aligning all of the other structures to. Essentially, we need a "model" that will be held constant
+    #for us to then align the other structures to (for target in local_list:).
     model = find_motifs(temp,comp,filename)
     for target in local_list:
-        comparison,types,a_count_local,b_count_local = compare(target,model,comp,temp)
+        comparison,types,a_count_local,b_count_local = compare(target,model,comp,temp,cluster_directory,results_directory)
         a_count += a_count_local
         b_count += b_count_local
         for i in range(len(comparison)):
@@ -228,12 +276,15 @@ def traceback(comp,temp,local_list,filename):
     print("B Count:  "+str(b_count))
     return new_xyz
     
-def get_aligned_xyz(temp,comp,commonality_directory,affinity_location):
+#This file makes the aligned xyz file for a given combination of temp and comp. Input directories used to 
+#make sure that the system knows where to go for the relevant files.
+def get_aligned_xyz(temp,comp,commonality_directory,affinity_directory,cluster_directory,results_directory,save_directory):
     local_dict = {}
     os.chdir(commonality_directory)
     files = os.listdir(os.getcwd())
     file_array = []
     length_array = []
+    #This block of code is used to get a sorted list of the HDBSCAN groups (ranked list from largest to smallest).
     for file in files:
         file_array.append(str(file))
         with open(file,'r') as in_file:
@@ -248,23 +299,24 @@ def get_aligned_xyz(temp,comp,commonality_directory,affinity_location):
         sorted_files.append(file_array[max_index])
         del file_array[max_index]
         del length_array[max_index]
-    os.chdir(affinity_location+"/affinities/refined_indices")
+    os.chdir(affinity_directory+"/refined_indices")
     working = os.getcwd()
+    #This is where the global boolean variable comes into play. The block inside of this if statement is the most time consuming
+    #part of this code, so setting "files_already_made" to True will allow us to skip over this block of code entirely if we've already done it.
     if files_already_made == False:
         for i in range(len(sorted_files)):
             print("Entering "+str(sorted_files[i]))
             os.chdir(working)
             local_list = []
+            #open the file of interest and add all of the constituent clusters to local_list.
             with open(sorted_files[i],'r') as in_file:
                 for line in in_file:
                     if line.startswith("#") == False:
                         local_list.append(int(line.strip()))
                 in_file.close()
-            new_xyz = traceback(comp,temp,local_list,sorted_files[i])
-            os.chdir(cwd+"/"+temp+"/"+comp)
-            if os.path.isdir("3D_Plots") == False:
-                os.mkdir("3D_Plots")
-            os.chdir(cwd+"/"+temp+"/"+comp+"/3D_Plots")            
+            #Feed this local list into the "traceback()" method.
+            new_xyz = traceback(comp,temp,local_list,sorted_files[i],cluster_directory,results_directory)
+            os.chdir(save_directory)        
             filename = str(sorted_files[i].strip(".txt"))+".xyz"
             with open(filename,'w') as out_file:
                 out_file.write(new_xyz)
@@ -427,66 +479,21 @@ def plot_types(x_array,y_array,z_array,tag,i,temp):
     plt.savefig(image_name.strip(".svg")+".png")
     plt.close()
 
-def make_plots():
+#main function that accomplishes the goal of the code.
+#variables:
+#   cluster_directory: (Path) leads the system to the cluster files.
+#   results_directory: (Path) leads the system to the results files.
+#   commonality_directory: (Path) leads system to commonality_groups
+#   affinity_directory: (Path) leads system to location of affinities
+#   save_directory: (Path) tells the system where to save the outputs of the script.
+def main():
     for temp in T:
         for comp in c:
-            if temp != "1450K":
-                commonality_directory = cwd+"/"+temp+"/"+comp+"/commonality_groups"
-                affinity_location = cwd+"/"+temp+"/"+comp
-            else:
-                commonality_directory = "F://CuZr_Motif/1000_atom_simulations/Mendelev/"+comp+"/commonality_groups"
-                affinity_location = "F://CuZr_Motif/1000_atom_simulations/Mendelev/"+comp           
-            sorted_files = get_aligned_xyz(temp,comp,commonality_directory,affinity_location)
-            os.chdir(cwd+"/"+temp+"/"+comp+"/3D_Plots")
-            for i in range(len(sorted_files)):
-                x_array = []
-                y_array = []
-                z_array = []
-                Zr_x_array = []
-                Zr_y_array = []
-                Zr_z_array = []
-                Cu_x_array = []
-                Cu_y_array = []
-                Cu_z_array = []
-                with open(sorted_files[i].strip(".txt")+".xyz") as in_file:
-                    in_file.readline()
-                    in_file.readline()
-                    line = in_file.readline()
-                    while line != "":
-                        line_list = line.split()
-                        x_array.append(float(line_list[1]))
-                        y_array.append(float(line_list[2]))
-                        z_array.append(float(line_list[3]))
-                        if line_list[0].strip() == "Zr":
-                            Zr_x_array.append(float(line_list[1]))
-                            Zr_y_array.append(float(line_list[2]))
-                            Zr_z_array.append(float(line_list[3]))
-                        elif line_list[0].strip() == "Cu":
-                            Cu_x_array.append(float(line_list[1]))
-                            Cu_y_array.append(float(line_list[2]))
-                            Cu_z_array.append(float(line_list[3]))                    
-                        line = in_file.readline()
-                    in_file.close()
-                plot_full(x_array,y_array,z_array,i,temp)
-                if (len(Zr_x_array) > 250) and (len(Cu_x_array) > 250):
-                    if len(Zr_x_array) < ((0.85)*len(x_array)):
-                        plot_types(Zr_x_array,Zr_y_array,Zr_z_array,"Zr",i,temp)
-                    if len(Cu_x_array) < ((0.85)*len(x_array)):
-                        plot_types(Cu_x_array,Cu_y_array,Cu_z_array,"Cu",i,temp)
-##            os.chdir(cwd+"/"+temp+"/"+comp)
-##            with open('x_positions.json','w') as fp:
-##                json.dump(compositional_x_dict,fp,indent=4)
-##                fp.close()
-##            with open('y_positions.json','w') as fp:
-##                json.dump(compositional_y_dict,fp,indent=4)
-##                fp.close()
-##            with open('z_positions.json','w') as fp:
-##                json.dump(compositional_z_dict,fp,indent=4)
-##                fp.close()                
-            compositional_x_dict.clear()
-            compositional_y_dict.clear()
-            compositional_z_dict.clear()
-def main():
-    make_plots()
-    
+            cluster_directory = Path("../data/"+temp+"/"+comp+"/clusters")
+            results_directory = Path("../data/"+temp+"/"+comp+"/results")
+            commonality_directory = Path("../data/"+temp+"/"+comp+"/affinities/commonality_groups")
+            affinity_directory = Path("../data/"+temp+"/"+comp+"/affinities")
+            save_directory = Path("../data/"+temp+"/"+comp+"/global_xyz")
+            get_aligned_xyz(temp,comp,commonality_directory,affinity_directory,cluster_directory,results_directory,save_directory)
+
 main()
