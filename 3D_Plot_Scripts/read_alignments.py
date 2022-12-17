@@ -18,8 +18,6 @@ import json
 from scipy import stats
 import scipy.spatial
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import math
 import matplotlib as mpl
 import seaborn as sns
 
@@ -114,7 +112,6 @@ def load_affinity(filename, normalize=True) -> np.ndarray:
 #returns:
 #   motif: (str) representative "motif" from the HDBSCAN group associated with the input filename.
 def find_motifs(temp,comp,filename):
-    motif_dict = {}
     motif_dir = Path("../data/"+temp+"/"+comp)
     affinity_dir = Path(motif_dir+"/affinities")
     os.chdir(affinity_dir)
@@ -205,8 +202,6 @@ def compare(model,target,comp,temp,cluster_dir,results_dir):
         best_fit = local_dict['aligned_model']
         lc = np.mean(A_model_new, axis=1)
         rc = np.mean(B_target_new, axis=1)  # Centroids
-        left = A_model_new - lc.reshape(3, 1)  # Center coordinates at centroids
-        right = B_target_new - rc.reshape(3, 1)
         final_centroid = np.mean(best_fit,axis=1)
         fitted = np.array(best_fit)-final_centroid.reshape(3,1)
         if (fitted.shape == A_model_new.shape):
@@ -276,7 +271,6 @@ def traceback(comp,temp,local_list,filename,cluster_directory,results_directory)
 #This file makes the aligned xyz file for a given combination of temp and comp. Input directories used to 
 #make sure that the system knows where to go for the relevant files.
 def get_aligned_xyz(temp,comp,commonality_directory,affinity_directory,cluster_directory,results_directory,save_directory):
-    local_dict = {}
     os.chdir(commonality_directory)
     files = os.listdir(os.getcwd())
     file_array = []
@@ -321,7 +315,6 @@ def get_aligned_xyz(temp,comp,commonality_directory,affinity_directory,cluster_d
     return sorted_files
 
 def plot_full(x_array,y_array,z_array,i,temp):
-    mu, sigma = 0, 0.1
     if temp == "1900K":
         color = mpl.cm.Reds
     elif temp == "1450K":
@@ -396,8 +389,7 @@ def plot_full(x_array,y_array,z_array,i,temp):
     plt.savefig(image_name.strip(".svg")+".png")
     plt.close()
 
-def plot_types(x_array,y_array,z_array,tag,i,temp):
-    mu, sigma = 0, 0.1 
+def plot_types(x_array,y_array,z_array,tag,i,temp): 
     if temp == "1900K":
         color = mpl.cm.Reds
     elif temp == "1450K":
@@ -445,19 +437,16 @@ def plot_types(x_array,y_array,z_array,tag,i,temp):
              bins=50, color = 'darkblue', 
              hist_kws={'edgecolor':'black'},
              kde_kws={'linewidth': 4},ax=axes[0])
-##    ax1.hist(x,bins=50,label="x",color="b")
     axes[1]=     sns.distplot(y, kde=True, 
              bins=50, color = 'darkgreen', 
              hist_kws={'edgecolor':'black'},
              kde_kws={'linewidth': 4},ax=axes[1])
 
-##    ax2.hist(y,bins=50,label="y",color="g")
     axes[2]=     sns.distplot(z, kde=True, 
              bins=50, color = 'darkred', 
              hist_kws={'edgecolor':'black'},
              kde_kws={'linewidth': 4},ax=axes[2])
 
-##    ax3.hist(z,bins=50,label="z",color="r")
     axes[0].legend(['x'],loc='upper right')
     axes[1].legend(['y'],loc='upper right')
     axes[2].legend(['z'],loc='upper right')
@@ -468,7 +457,6 @@ def plot_types(x_array,y_array,z_array,tag,i,temp):
     fig.suptitle("Motif "+str(i+1)+" "+tag+" "+str(size)+" Histogram")
     image_format = 'svg' # e.g .png, .svg, etc.
     image_name = "Motif "+str(i+1)+" "+tag+" "+str(size)+" Atoms Histogram.svg"
-    #plt.show()
     plt.savefig(image_name, format=image_format, dpi=1200)
     plt.savefig(image_name.strip(".svg")+".png")
     plt.close()
