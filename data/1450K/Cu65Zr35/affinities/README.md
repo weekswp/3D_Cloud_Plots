@@ -1,0 +1,1 @@
+"affinities" files read by read_alignment.py code.
