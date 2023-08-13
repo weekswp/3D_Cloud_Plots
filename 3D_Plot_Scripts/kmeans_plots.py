@@ -126,7 +126,7 @@ def make_kmeans_plots(kmeans_directory,cluster_dict,motif):
 def make_centroid_plots(centroid_directory,cluster_dict,best_centers,motif):
     fig=plt.figure()
     ax=Axes3D(fig)
-    viridis = mpl.cm.get_cmap('viridis',8)
+    color = mpl.colors.LinearSegmentedColormap.from_list("", ["red","lightcoral","green","cornflowerblue","blue"])
     stdev_tracker = 100.0
     stdev_pointer = 0
     #The entire purpose of this loop is to determine which group is the "central" group at the middle of the cluster. 
@@ -178,10 +178,10 @@ def make_centroid_plots(centroid_directory,cluster_dict,best_centers,motif):
             ax.scatter(best_centers[i][0],best_centers[i][1],best_centers[i][2],s=250.0*cluster_dict[i]["size"],c=likelihood_array[i],cmap=viridis,vmin=min(likelihood_array),vmax=max(likelihood_array))
         else:
             ax.scatter(best_centers[i][0],best_centers[i][1],best_centers[i][2],s=250.0*cluster_dict[i]["size"],edgecolor = "black",c=likelihood_array[i],cmap=viridis,vmin=min(likelihood_array),vmax=max(likelihood_array))                          
-    #color_labels used to make linear spacing of occupational probabilities for the colorbar of the plot.
-    color_labels = np.round(np.linspace(min(likelihood_array),max(likelihood_array),6),3)
-    cb = fig.colorbar(mpl.cm.ScalarMappable(cmap=viridis),label='Probability')
-    cb.ax.set_yticklabels(color_labels)
+    #make linear spacing of occupational probabilities for the colorbar of the plot. Notably, a global scalebar of 0.5 - 1.5 was used.
+    norm = mpl.colors.Normalize(vmin=0.5,vmax=1.5)
+    cb = fig.colorbar(mpl.cm.ScalarMappable(norm=norm,cmap=color),label='Probability')
+    cb.ax.set_yticklabels([0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5])
     #In addition to the plots, we also make "xyz" files for the centroid positions as another file format.
     os.chdir(centroid_directory)
     data = str(len(best_centers))+"\n\n"
